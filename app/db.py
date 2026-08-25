@@ -80,11 +80,11 @@ def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
                 f"PRAGMA user_version={SCHEMA_VERSION};"
             )
         conn.executescript(SCHEMA)
-        count = conn.execute("SELECT COUNT(*) FROM suppliers").fetchone()[0]
-        if count == 0 and seed_rows:
+        if seed_rows:
+            # sync: add any seed entries missing from the index (never overwrite edits)
             for row in seed_rows:
                 conn.execute(
-                    """INSERT INTO suppliers
+                    """INSERT OR IGNORE INTO suppliers
                        (name, category, website, country, location, moq,
                         certifications, products, description, tags,
                         pack_sizes, price_examples, pricing_note)
@@ -101,8 +101,7 @@ def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
                         row.get("pricing_note", ""),
                     ),
                 )
-            count = len(seed_rows)
-        return count
+        return conn.execute("SELECT COUNT(*) FROM suppliers").fetchone()[0]
 
 
 def _row_to_dict(r: sqlite3.Row) -> dict[str, Any]:

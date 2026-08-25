@@ -652,6 +652,42 @@ PRICE_AND_PACKS: dict[str, dict] = {
             {"item": "Chemical & pharma offers", "price": "Quote", "unit": "varies"},
         ],
     },
+    "Pharmaoffer": {
+        "pack_sizes": ["pilot kg → commercial tons"],
+        "pricing_note": "Multi-supplier RFQ comparison, free for buyers",
+        "price_examples": [
+            {"item": "API quotes", "price": "Quote", "unit": "kg lots"},
+        ],
+    },
+    "Knowde": {
+        "pack_sizes": ["sample → drum → tote"],
+        "pricing_note": "List pricing or quote carts set by producers",
+        "price_examples": [
+            {"item": "Nutraceutical actives", "price": "$10–200", "unit": "kg (typical range)"},
+        ],
+    },
+    "CPHI Online": {
+        "pack_sizes": ["n/a (RFQ platform)"],
+        "pricing_note": "Buyer membership free tiers; quotes from verified GMP sites",
+        "price_examples": [
+            {"item": "API/excipient RFQs", "price": "Quote", "unit": "per RFQ"},
+        ],
+    },
+    "EudraGMDP Database (EMA)": {
+        "pack_sizes": ["n/a — register"],
+        "pricing_note": "Free public access",
+        "price_examples": [],
+    },
+    "NABP Accredited Distributor Search (VAWD)": {
+        "pack_sizes": ["n/a — directory"],
+        "pricing_note": "Free public lookup",
+        "price_examples": [],
+    },
+    "FDA Establishment Registration & Listing": {
+        "pack_sizes": ["n/a — register"],
+        "pricing_note": "Free public access",
+        "price_examples": [],
+    },
 }
 
 MARKETPLACES = [
@@ -752,7 +788,85 @@ def enrich(rows) -> list[dict]:
     return rows
 
 
-ALL_SUPPLIERS: list[dict] = validate(enrich(SUPPLIERS + MARKETPLACES))
+# ---------------------------------------------------------------------------
+# Sourcing platforms & regulatory directories (licensed/verified channels)
+# ---------------------------------------------------------------------------
+SOURCING_PLATFORMS = [
+    {
+        "name": "Pharmaoffer",
+        "category": "marketplace",
+        "website": "https://www.pharmaoffer.com",
+        "country": "Netherlands",
+        "location": "Leiden, NL",
+        "moq": "Quote-based; pilot to commercial",
+        "certifications": ["Verified CDMO/API profiles", "DMF/CEP status shown"],
+        "products": ["APIs", "excipients", "CDMO services", "finished dose manufacturing"],
+        "description": "B2B platform to find and quote vetted API manufacturers and contract manufacturers worldwide.",
+        "tags": ["b2b", "api sourcing", "cdmo", "rfq"],
+    },
+    {
+        "name": "Knowde",
+        "category": "marketplace",
+        "website": "https://www.knowde.com",
+        "country": "USA",
+        "location": "San Jose, CA",
+        "moq": "Supplier-defined; sample requests supported",
+        "certifications": ["Direct-from-producer listings", "TDS/SDS docs attached"],
+        "products": ["nutraceutical ingredients", "functional actives", "chemicals", "flavors"],
+        "description": "Online marketplace where ingredient producers list products with technical documentation and quotes.",
+        "tags": ["b2b", "ingredients", "documentation"],
+    },
+    {
+        "name": "CPHI Online",
+        "category": "marketplace",
+        "website": "https://www.cphi.com",
+        "country": "Netherlands",
+        "location": "Amsterdam, NL (global network)",
+        "moq": "n/a — RFQ platform",
+        "certifications": ["Verified supplier profiles", "GMP site info listed"],
+        "products": ["APIs", "excipients", "contract manufacturing", "packaging", "machinery"],
+        "description": "Informa's pharma supply-chain platform connecting buyers with GMP suppliers year-round plus CPHI trade shows.",
+        "tags": ["b2b", "directory", "rfq", "trade shows"],
+    },
+    {
+        "name": "EudraGMDP Database (EMA)",
+        "category": "pharma_dist",
+        "website": "https://eudragmdp.ema.europa.eu",
+        "country": "EU/EEA",
+        "location": "Amsterdam, NL (EMA)",
+        "moq": "n/a — official register",
+        "certifications": ["Official EU database", "GDP certificate status"],
+        "products": ["wholesale distribution authorizations", "GMP certificates", "manufacturing authorizations"],
+        "description": "EU regulator-run register of licensed wholesale distributors and GDP/GMP certificate status across member states.",
+        "tags": ["regulatory", "verify wholesalers", "gdp"],
+    },
+    {
+        "name": "NABP Accredited Distributor Search (VAWD)",
+        "category": "pharma_dist",
+        "website": "https://nabp.pharmacy",
+        "country": "USA",
+        "location": "Mount Prospect, IL",
+        "moq": "n/a — accreditation directory",
+        "certifications": ["VAWD accreditation", "State licensure verified by NABP"],
+        "products": ["accredited wholesale distributor lookup", "pharmacy verification"],
+        "description": "Search tool from the National Association of Boards of Pharmacy for VAWD-accredited drug wholesalers.",
+        "tags": ["regulatory", "verify distributors", "accreditation"],
+    },
+    {
+        "name": "FDA Establishment Registration & Listing",
+        "category": "api",
+        "website": "https://www.accessdata.fda.gov/scripts/cder/drls/",
+        "country": "USA",
+        "location": "Silver Spring, MD",
+        "moq": "n/a — official register",
+        "certifications": ["Official FDA database"],
+        "products": ["registered drug manufacturers", "repackers", "contract manufacturers", "API facilities"],
+        "description": "Verify that a drug facility is FDA-registered and what operations it is authorized to perform.",
+        "tags": ["regulatory", "due diligence", "facility verification"],
+    },
+]
+
+ALL_SUPPLIERS: list[dict] = validate(enrich(SUPPLIERS + MARKETPLACES + SOURCING_PLATFORMS))
 
 
 if __name__ == "__main__":
