@@ -37,6 +37,11 @@ main{flex:1}
 .kv b{color:#aebccd;font-weight:600}
 .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .chip{font-size:11.5px;background:#101720;border:1px solid var(--edge);border-radius:6px;padding:2px 7px;color:var(--dim)}
+table.prices{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+table.prices th{color:var(--dim);text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--edge);padding:4px 8px 4px 0}
+table.prices td{padding:4px 12px 4px 0;border-bottom:1px dashed #1c242f;color:#c6d2e2}
+table.prices td.amt{color:var(--acc);font-weight:600;white-space:nowrap}
+.pnote{margin-top:6px;font-size:12.5px;color:#8b99ab;font-style:italic}
 .empty{text-align:center;color:var(--dim);padding:60px 0}
 footer{max-width:900px;margin:0 auto 40px;padding:0 16px;color:#5c6a7c;font-size:12px;text-align:center}
 @media(max-width:800px){.layout{flex-direction:column}aside{width:100%}}
@@ -45,7 +50,7 @@ footer{max-width:900px;margin:0 auto 40px;padding:0 16px;color:#5c6a7c;font-size
 <body>
 <header>
   <h1>Bulk<span>Source</span></h1>
-  <div class="sub">Search engine for bulk &amp; wholesale suppliers of drugs and supplements</div>
+  <div class="sub">Bulk &amp; wholesale suppliers of drugs and supplements — prices, MOQs &amp; pack sizes included</div>
 </header>
 
 <div class="searchwrap">
@@ -65,7 +70,7 @@ footer{max-width:900px;margin:0 auto 40px;padding:0 16px;color:#5c6a7c;font-size
   </main>
 </div>
 
-<footer>Seed index of real companies for B2B sourcing research. Verify licensing (FDA / DEA / state) and certifications directly with each supplier before purchase. Not medical advice.</footer>
+<footer>Prices are indicative ranges for typical bulk quantities — request current quotes before purchasing. Verify licensing (FDA / DEA / state) and certifications directly with each supplier. Not medical advice.</footer>
 
 <script>
 const state = {q:"", category:new Set(), country:new Set(), cert:new Set()};
@@ -108,6 +113,8 @@ function resultCard(s){
       <span><b>MOQ:</b> ${s.moq || "—"}</span>
       ${s.certifications.length?`<span><b>Certs:</b> ${s.certifications.join(", ")}</span>`:""}
     </div>
+    ${(s.pack_sizes&&s.pack_sizes.length)?`<div class="chips">${s.pack_sizes.map(p=>`<span class="chip">📦 ${p}</span>`).join("")}</div>`:""}
+    ${(s.price_examples&&s.price_examples.length)?`<table class="prices"><tr><th>Item</th><th>Indicative price</th><th>Unit</th></tr>${s.price_examples.map(p=>`<tr><td>${p.item}</td><td class="amt">${p.price}</td><td>${p.unit}</td></tr>`).join("")}</table>${s.pricing_note?`<div class="pnote">${s.pricing_note}</div>`:""}`:(s.pricing_note?`<div class="pnote">${s.pricing_note}</div>`:"")}
     ${s.products.length?`<div class="chips">${s.products.map(p=>`<span class="chip">${p}</span>`).join("")}${s.tags.map(t=>`<span class="chip">#${t}</span>`).join("")}</div>`:""}`;
   return d;
 }

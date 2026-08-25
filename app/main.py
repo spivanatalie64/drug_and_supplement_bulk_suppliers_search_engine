@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .db import facets, get_supplier, init_db, search
-from .seed_data import SUPPLIERS
+from .seed_data import ALL_SUPPLIERS as SUPPLIERS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 

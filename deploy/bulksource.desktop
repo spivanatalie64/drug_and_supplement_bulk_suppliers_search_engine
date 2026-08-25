@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=BulkSource
+GenericName=Supplier Search Engine
+Comment=Search bulk & wholesale suppliers of drugs and supplements — prices, MOQs, pack sizes
+Exec=xdg-open http://localhost:8010
+TryExec=xdg-open
+Icon=bulksource
+Terminal=false
+Categories=Network;Business;Science;
+Keywords=supplements;suppliers;wholesale;bulk;pharma;vitamins;sourcing;
+StartupNotify=true

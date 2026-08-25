@@ -15,6 +15,10 @@ FastAPI + SQLite FTS5 backend, zero-dependency vanilla JS frontend.
 - **29-company seed index** — real companies: BulkSupplements, PureBulk, Prinova,
   Glanbia Nutritionals, Starwest Botanicals, Cayman Chemical, Suanfarma, McKesson,
   Cencora, Cardinal Health and more
+- **Pricing & quantities** — indicative bulk price examples ($/kg etc.), pack sizes
+  and MOQ notes per supplier; searchable ("$45 kg", "25 kg drum")
+- **B2B marketplaces indexed** — Alibaba.com, Made-in-China.com, IndiaMART,
+  Global Sources, DHgate, ThomasNet, EC21
 
 ## Quick start
 
@@ -35,6 +39,13 @@ loginctl enable-linger $USER   # keep it running across reboots without login
 ```
 
 Web UI: http://localhost:8010
+
+A desktop launcher (`bulksource.desktop`) can be installed for one-click browser access:
+
+```bash
+cp deploy/bulksource.desktop ~/.local/share/applications/
+cp deploy/bulksource.desktop ~/Desktop/ && chmod +x ~/Desktop/bulksource.desktop
+```
 
 ## MCP server (use from AI agents / opencode)
 

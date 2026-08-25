@@ -17,7 +17,7 @@ except ImportError:
     from mcp.server.fastmcp import FastMCP
 
 from app.db import CATEGORY_LABELS, facets, get_supplier, init_db, search
-from app.seed_data import SUPPLIERS
+from app.seed_data import ALL_SUPPLIERS as SUPPLIERS
 
 init_db(SUPPLIERS)  # auto-create/seed index on startup
 

@@ -7,12 +7,13 @@ from pathlib import Path
 from typing import Any
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "suppliers.db"
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
     id           INTEGER PRIMARY KEY,
     name         TEXT NOT NULL UNIQUE,
-    category     TEXT NOT NULL CHECK (category IN ('ingredient','finished','botanical','api','pharma_dist')),
+    category     TEXT NOT NULL CHECK (category IN ('ingredient','finished','botanical','api','pharma_dist','marketplace')),
     website      TEXT NOT NULL,
     country      TEXT NOT NULL,
     location     TEXT NOT NULL DEFAULT '',
@@ -20,25 +21,32 @@ CREATE TABLE IF NOT EXISTS suppliers (
     certifications TEXT NOT NULL DEFAULT '[]',
     products     TEXT NOT NULL DEFAULT '[]',
     description  TEXT NOT NULL,
-    tags         TEXT NOT NULL DEFAULT '[]'
+    tags         TEXT NOT NULL DEFAULT '[]',
+    pack_sizes   TEXT NOT NULL DEFAULT '[]',
+    price_examples TEXT NOT NULL DEFAULT '[]',
+    pricing_note TEXT NOT NULL DEFAULT ''
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS suppliers_fts USING fts5(
-    name, description, products, tags, certs,
+    name, description, products, tags, certs, packs_prices,
     content='suppliers', content_rowid='id'
 );
 CREATE TRIGGER IF NOT EXISTS suppliers_ai AFTER INSERT ON suppliers BEGIN
-    INSERT INTO suppliers_fts(rowid, name, description, products, tags, certs)
-    VALUES (new.id, new.name, new.description, new.products, new.tags, new.certifications);
+    INSERT INTO suppliers_fts(rowid, name, description, products, tags, certs, packs_prices)
+    VALUES (new.id, new.name, new.description, new.products, new.tags, new.certifications,
+            new.pack_sizes || ' ' || new.price_examples || ' ' || new.pricing_note);
 END;
 CREATE TRIGGER IF NOT EXISTS suppliers_ad AFTER DELETE ON suppliers BEGIN
-    INSERT INTO suppliers_fts(suppliers_fts, rowid, name, description, products, tags, certs)
-    VALUES ('delete', old.id, old.name, old.description, old.products, old.tags, old.certifications);
+    INSERT INTO suppliers_fts(suppliers_fts, rowid, name, description, products, tags, certs, packs_prices)
+    VALUES ('delete', old.id, old.name, old.description, old.products, old.tags, old.certifications,
+            old.pack_sizes || ' ' || old.price_examples || ' ' || old.pricing_note);
 END;
 CREATE TRIGGER IF NOT EXISTS suppliers_au AFTER UPDATE ON suppliers BEGIN
-    INSERT INTO suppliers_fts(suppliers_fts, rowid, name, description, products, tags, certs)
-    VALUES ('delete', old.id, old.name, old.description, old.products, old.tags, old.certifications);
-    INSERT INTO suppliers_fts(rowid, name, description, products, tags, certs)
-    VALUES (new.id, new.name, new.description, new.products, new.tags, new.certifications);
+    INSERT INTO suppliers_fts(suppliers_fts, rowid, name, description, products, tags, certs, packs_prices)
+    VALUES ('delete', old.id, old.name, old.description, old.products, old.tags, old.certifications,
+            old.pack_sizes || ' ' || old.price_examples || ' ' || old.pricing_note);
+    INSERT INTO suppliers_fts(rowid, name, description, products, tags, certs, packs_prices)
+    VALUES (new.id, new.name, new.description, new.products, new.tags, new.certifications,
+            new.pack_sizes || ' ' || new.price_examples || ' ' || new.pricing_note);
 END;
 """
 
@@ -48,6 +56,7 @@ CATEGORY_LABELS = {
     "botanical": "Botanicals",
     "api": "APIs & chemicals",
     "pharma_dist": "Pharma distribution",
+    "marketplace": "B2B marketplace",
 }
 
 
@@ -59,8 +68,17 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
-    """Create schema; seed only when table empty. Returns row count."""
+    """Create schema (migrating old versions); seed only when table empty."""
     with connect() as conn:
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version < SCHEMA_VERSION:
+            # drop legacy tables/triggers and rebuild from scratch
+            conn.executescript(
+                "DROP TRIGGER IF EXISTS suppliers_ai; DROP TRIGGER IF EXISTS suppliers_ad;"
+                "DROP TRIGGER IF EXISTS suppliers_au;"
+                "DROP TABLE IF EXISTS suppliers_fts; DROP TABLE IF EXISTS suppliers;"
+                f"PRAGMA user_version={SCHEMA_VERSION};"
+            )
         conn.executescript(SCHEMA)
         count = conn.execute("SELECT COUNT(*) FROM suppliers").fetchone()[0]
         if count == 0 and seed_rows:
@@ -68,8 +86,9 @@ def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
                 conn.execute(
                     """INSERT INTO suppliers
                        (name, category, website, country, location, moq,
-                        certifications, products, description, tags)
-                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                        certifications, products, description, tags,
+                        pack_sizes, price_examples, pricing_note)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         row["name"], row["category"], row["website"], row["country"],
                         row.get("location", ""), row.get("moq", ""),
@@ -77,6 +96,9 @@ def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
                         json.dumps(row.get("products", [])),
                         row["description"],
                         json.dumps(row.get("tags", [])),
+                        json.dumps(row.get("pack_sizes", [])),
+                        json.dumps(row.get("price_examples", [])),
+                        row.get("pricing_note", ""),
                     ),
                 )
             count = len(seed_rows)
@@ -90,6 +112,8 @@ def _row_to_dict(r: sqlite3.Row) -> dict[str, Any]:
     d["certifications"] = json.loads(d.pop("certifications") or "[]")
     d["products"] = json.loads(d.pop("products") or "[]")
     d["tags"] = json.loads(d.pop("tags") or "[]")
+    d["pack_sizes"] = json.loads(d.pop("pack_sizes") or "[]")
+    d["price_examples"] = json.loads(d.pop("price_examples") or "[]")
     return d
 
 
@@ -181,6 +205,6 @@ def facets() -> dict[str, list]:
 
 
 if __name__ == "__main__":
-    from .seed_data import SUPPLIERS
+    from .seed_data import ALL_SUPPLIERS as SUPPLIERS
 
     print(f"seeded/loaded: {init_db(SUPPLIERS)} suppliers at {DB_PATH}")

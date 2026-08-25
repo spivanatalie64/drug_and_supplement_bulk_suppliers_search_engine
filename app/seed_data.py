@@ -376,9 +376,384 @@ def validate(rows):
     for r in rows:
         assert r["name"] not in seen, f"Duplicate: {r['name']}"
         seen.add(r["name"])
-        assert r["category"] in {"ingredient", "finished", "pharma_dist", "api", "botanical"}, r["name"]
+        assert r["category"] in {
+            "ingredient", "finished", "pharma_dist", "api", "botanical", "marketplace"
+        }, r["name"]
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Pricing & pack-size enrichment.
+# Prices are INDICATIVE list/range figures for typical bulk quantities, meant
+# for comparison shopping only; confirm current quotes with the supplier.
+# ---------------------------------------------------------------------------
+PRICE_AND_PACKS: dict[str, dict] = {
+    "BulkSupplements.com": {
+        "pack_sizes": ["100 g", "500 g", "1 kg", "5 kg", "25 kg"],
+        "pricing_note": "Per-kg price drops sharply at 5 kg+ tiers",
+        "price_examples": [
+            {"item": "Creatine monohydrate", "price": "$16–26", "unit": "kg"},
+            {"item": "Caffeine anhydrous", "price": "$12–20", "unit": "kg"},
+            {"item": "L-Glutamine", "price": "$14–22", "unit": "kg"},
+        ],
+    },
+    "PureBulk Inc": {
+        "pack_sizes": ["100 g", "250 g", "1 kg", "5 kg", "20 kg"],
+        "pricing_note": "COA per lot included in price",
+        "price_examples": [
+            {"item": "Creatine monohydrate (Creapure)", "price": "$45–65", "unit": "kg"},
+            {"item": "Creatine monohydrate (generic)", "price": "$18–30", "unit": "kg"},
+            {"item": "Beta-alanine", "price": "$20–32", "unit": "kg"},
+        ],
+    },
+    "NutriScience Innovations LLC": {
+        "pack_sizes": ["1 kg", "5 kg", "25 kg drum"],
+        "pricing_note": "Quote-based above 25 kg",
+        "price_examples": [
+            {"item": "NAC", "price": "$28–45", "unit": "kg"},
+            {"item": "Alpha-GPC 50% powder", "price": "$60–95", "unit": "kg"},
+        ],
+    },
+    "IngredientsOnline.com": {
+        "pack_sizes": ["25 kg carton", "50 lb fiber drum", "pallet"],
+        "pricing_note": "Transparent tiered list pricing on site; RFQ for pallets",
+        "price_examples": [
+            {"item": "Vitamin C ascorbic acid", "price": "$8–15", "unit": "kg"},
+            {"item": "Magnesium glycinate", "price": "$14–24", "unit": "kg"},
+        ],
+    },
+    "Prinova Global Solutions": {
+        "pack_sizes": ["bag", "box", "pallet", "bulk truckload"],
+        "pricing_note": "Contract/distributor pricing via account reps",
+        "price_examples": [
+            {"item": "Sweeteners & proteins", "price": "Quote", "unit": "per lot"},
+        ],
+    },
+    "Glanbia Nutritionals": {
+        "pack_sizes": ["custom premix batches", "tote/pallet"],
+        "pricing_note": "Custom-quoted premix programs",
+        "price_examples": [
+            {"item": "Vitamin premix blends", "price": "Quote", "unit": "per batch"},
+        ],
+    },
+    "Blue California": {
+        "pack_sizes": ["1 kg", "5 kg", "25 kg"],
+        "pricing_note": "Premium fermentation-derived actives",
+        "price_examples": [
+            {"item": "L-Ergothioneine", "price": "$800–1500", "unit": "kg"},
+        ],
+    },
+    "AIDP Inc": {
+        "pack_sizes": ["1 kg", "5 kg", "25 kg drum"],
+        "pricing_note": "Branded ingredients carry premium vs commodity",
+        "price_examples": [
+            {"item": "Magtein (Mg L-threonate)", "price": "$90–140", "unit": "kg"},
+        ],
+    },
+    "Jiaherb Inc": {
+        "pack_sizes": ["1 kg", "5 kg", "25 kg drum"],
+        "pricing_note": "Standardization ratio drives price",
+        "price_examples": [
+            {"item": "Curcuminoids 95% extract", "price": "$30–55", "unit": "kg"},
+            {"item": "Green tea extract 50% EGCG", "price": "$25–45", "unit": "kg"},
+        ],
+    },
+    "NOW Natural Foods (Wholesale)": {
+        "pack_sizes": ["case of 6–12 units", "master case"],
+        "pricing_note": "Wholesale ~40-50% off MSRP via distributors",
+        "price_examples": [
+            {"item": "Finished bottles (typ. 60–120 ct)", "price": "$6–25", "unit": "bottle wholesale"},
+        ],
+    },
+    "Piping Rock Health Products": {
+        "pack_sizes": ["case packs", "private label runs from ~1k units"],
+        "pricing_note": "Private label quoted per SKU and run length",
+        "price_examples": [
+            {"item": "Stock supplements wholesale", "price": "$2–12", "unit": "bottle"},
+        ],
+    },
+    "Hard Rhino / BulkSupplements Private Label": {
+        "pack_sizes": ["cases", "pallets"],
+        "pricing_note": "Low case minimums; label setup fee may apply",
+        "price_examples": [
+            {"item": "Capsules (stock formulas)", "price": "$3–10", "unit": "bottle"},
+        ],
+    },
+    "Starwest Botanicals": {
+        "pack_sizes": ["4 oz", "1 lb", "5 lb", "25 lb sack"],
+        "pricing_note": "Organic line priced above conventional",
+        "price_examples": [
+            {"item": "Organic chamomile flowers whole", "price": "$12–22", "unit": "lb"},
+            {"item": "Organic turmeric powder", "price": "$6–12", "unit": "lb"},
+        ],
+    },
+    "Mountain Rose Herbs": {
+        "pack_sizes": ["4 oz", "1 lb", "5 lb", "25 lb"],
+        "pricing_note": "No minimum order; bulk pricing tiers online",
+        "price_examples": [
+            {"item": "Organic nettle leaf c/s", "price": "$9–16", "unit": "lb"},
+            {"item": "Organic lavender flowers", "price": "$14–26", "unit": "lb"},
+        ],
+    },
+    "Monterey Bay Spice Co.": {
+        "pack_sizes": ["1/4 lb", "1 lb", "5 lb", "25 lb"],
+        "pricing_note": "Small-business friendly pack ladder",
+        "price_examples": [
+            {"item": "Hibiscus flowers c/s", "price": "$5–10", "unit": "lb"},
+        ],
+    },
+    "Atlantic Spice Company": {
+        "pack_sizes": ["1 lb", "5 lb", "25 lb box"],
+        "pricing_note": "Volume breaks at 5/25 lb",
+        "price_examples": [
+            {"item": "Cinnamon powder (cassia)", "price": "$3–7", "unit": "lb"},
+        ],
+    },
+    "San Francisco Herb & Natural Food Co.": {
+        "pack_sizes": ["1 lb", "5 lb", "25 lb"],
+        "pricing_note": "Long-standing flat wholesale tiers",
+        "price_examples": [
+            {"item": "Rosemary leaf whole", "price": "$4–9", "unit": "lb"},
+        ],
+    },
+    "Cayman Chemical": {
+        "pack_sizes": ["mg vials", "g lots", "multi-kg GMP campaigns"],
+        "pricing_note": "Research mg-g; GMP scale-up separately quoted",
+        "price_examples": [
+            {"item": "Bioactive reference standards", "price": "$50–400", "unit": "vial"},
+        ],
+    },
+    "Sigma-Aldrich (Merck KGaA)": {
+        "pack_sizes": ["g bottles", "kg pails", "ton IBC"],
+        "pricing_note": "Catalog list prices; volume contracts via sales",
+        "price_examples": [
+            {"item": "USP-grade excipients", "price": "$40–200+", "unit": "kg catalog"},
+        ],
+    },
+    "Alfa Chemistry": {
+        "pack_sizes": ["g", "100 g", "kg"],
+        "pricing_note": "Impurity standards often $100+/10 mg",
+        "price_examples": [
+            {"item": "Pharmaceutical impurity standards", "price": "$100–600", "unit": "10 mg–1 g"},
+        ],
+    },
+    "Suanfarma": {
+        "pack_sizes": ["kg commercial packs", "drum (25–50 kg)", "container"],
+        "pricing_note": "Contract API pricing with DMF support",
+        "price_examples": [
+            {"item": "Commercial APIs", "price": "Quote / contract", "unit": "kg"},
+        ],
+    },
+    "PharmaCompass": {
+        "pack_sizes": ["n/a (RFQ platform)"],
+        "pricing_note": "Free RFQ to multiple DMF-holding factories",
+        "price_examples": [
+            {"item": "API quotes", "price": "Quote", "unit": "per RFQ"},
+        ],
+    },
+    "Xi'an Natural Field Biotechnology": {
+        "pack_sizes": ["1 kg foil bag", "25 kg drum"],
+        "pricing_note": "FOB China; samples free with freight collect",
+        "price_examples": [
+            {"item": "Plant extracts (standardized)", "price": "$10–80", "unit": "kg FOB"},
+        ],
+    },
+    "Hunan Nutramax Inc.": {
+        "pack_sizes": ["1 kg", "25 kg drum"],
+        "pricing_note": "High-volume export pricing",
+        "price_examples": [
+            {"item": "Botanical extracts", "price": "$8–60", "unit": "kg FOB"},
+        ],
+    },
+    "McKesson Corporation": {
+        "pack_sizes": ["each", "case"],
+        "pricing_note": "WAC + contract pricing; requires pharmacy license/account",
+        "price_examples": [
+            {"item": "Brand & generic Rx", "price": "WAC/contract", "unit": "per account"},
+        ],
+    },
+    "Cencora (formerly AmerisourceBergen)": {
+        "pack_sizes": ["each", "case"],
+        "pricing_note": "WAC/contract; specialty buy-side programs",
+        "price_examples": [
+            {"item": "Rx distribution", "price": "WAC/contract", "unit": "per account"},
+        ],
+    },
+    "Cardinal Health (Pharmaceutical Segment)": {
+        "pack_sizes": ["each", "case"],
+        "pricing_note": "WAC/contract; generics programs available",
+        "price_examples": [
+            {"item": "Rx distribution", "price": "WAC/contract", "unit": "per account"},
+        ],
+    },
+    "Morris & Dickson Co., LLC": {
+        "pack_sizes": ["each", "case"],
+        "pricing_note": "Independent-pharmacy generic programs",
+        "price_examples": [
+            {"item": "Rx distribution", "price": "Account terms", "unit": "per account"},
+        ],
+    },
+    "Smith Drug Company": {
+        "pack_sizes": ["each", "case"],
+        "pricing_note": "Regional account terms",
+        "price_examples": [
+            {"item": "Rx distribution", "price": "Account terms", "unit": "per account"},
+        ],
+    },
+
+    # ---------------- B2B marketplaces ----------------
+    "Alibaba.com": {
+        "pack_sizes": ["seller-defined: 1 kg bags → FCL containers"],
+        "pricing_note": "Tiered per-MOQ pricing listed live; Trade Assurance escrow",
+        "price_examples": [
+            {"item": "Bulk supplement powders", "price": "$2–60", "unit": "kg (MOQ-dependent)"},
+            {"item": "Finished softgels/capsules OEM", "price": "$0.01–0.05", "unit": "capsule"},
+        ],
+    },
+    "Made-in-China.com": {
+        "pack_sizes": ["seller-defined: kg drums → containers"],
+        "pricing_note": "Onsite-check verified suppliers; negotiated pricing",
+        "price_examples": [
+            {"item": "Botanical extracts", "price": "$5–70", "unit": "kg (MOQ-dependent)"},
+        ],
+    },
+    "IndiaMART": {
+        "pack_sizes": ["seller-defined: kg → tons"],
+        "pricing_note": "Quote-based; huge Indian pharma/excipient base",
+        "price_examples": [
+            {"item": "APIs & excipients", "price": "Quote", "unit": "kg lots"},
+        ],
+    },
+    "Global Sources": {
+        "pack_sizes": ["seller-defined"],
+        "pricing_note": "Verified-manufacturer program; RFQ workflow",
+        "price_examples": [
+            {"item": "Health products & ingredients", "price": "Quote", "unit": "varies"},
+        ],
+    },
+    "DHgate": {
+        "pack_sizes": ["small-lot wholesale (1–100 units)"],
+        "pricing_note": "Escrow protected small-batch pricing",
+        "price_examples": [
+            {"item": "Small-lot supplements", "price": "$1–15", "unit": "unit"},
+        ],
+    },
+    "ThomasNet": {
+        "pack_sizes": ["n/a (directory)"],
+        "pricing_note": "US manufacturer directory with direct RFQ",
+        "price_examples": [
+            {"item": "Co-man/co-pack quotes", "price": "Quote", "unit": "per project"},
+        ],
+    },
+    "EC21": {
+        "pack_sizes": ["seller-defined"],
+        "pricing_note": "Korea-based global B2B offers board",
+        "price_examples": [
+            {"item": "Chemical & pharma offers", "price": "Quote", "unit": "varies"},
+        ],
+    },
+}
+
+MARKETPLACES = [
+    {
+        "name": "Alibaba.com",
+        "category": "marketplace",
+        "website": "https://www.alibaba.com",
+        "country": "China",
+        "location": "Hangzhou, CN (global reach)",
+        "moq": "Set by seller; commonly 1–500 kg or 100+ units",
+        "certifications": ["Trade Assurance escrow", "Supplier verification tiers"],
+        "products": ["supplement raw materials", "APIs", "herbal extracts", "OEM finished supplements", "packaging"],
+        "description": "World's largest B2B marketplace; filter by Verified Supplier, trade assurance and MOQ.",
+        "tags": ["b2b", "oem", "global sourcing", "escrow"],
+    },
+    {
+        "name": "Made-in-China.com",
+        "category": "marketplace",
+        "website": "https://www.made-in-china.com",
+        "country": "China",
+        "location": "Nanjing, CN (global reach)",
+        "moq": "Seller-defined; typically 25–100 kg",
+        "certifications": ["Onsite Check factory audits", "Verified Supplier badges"],
+        "products": ["botanical extracts", "nutraceutical raws", "pharma machinery", "supplements"],
+        "description": "Major Chinese B2B portal with audited-factory listings across nutraceutical supply.",
+        "tags": ["b2b", "factory audits", "global sourcing"],
+    },
+    {
+        "name": "IndiaMART",
+        "category": "marketplace",
+        "website": "https://www.indiamart.com",
+        "country": "India",
+        "location": "Noida, IN",
+        "moq": "Seller-defined; quote-based",
+        "certifications": ["Supplier verification levels", "GST-registered sellers"],
+        "products": ["APIs", "excipients", "ayurvedic/herbal ingredients", "pharma machinery"],
+        "description": "India's largest B2B marketplace with deep pharmaceutical and herbal supplier base.",
+        "tags": ["b2b", "india", "quote-based"],
+    },
+    {
+        "name": "Global Sources",
+        "category": "marketplace",
+        "website": "https://www.globalsources.com",
+        "country": "Hong Kong/China",
+        "location": "Hong Kong SAR",
+        "moq": "Seller-defined",
+        "certifications": ["Verified Manufacturer program"],
+        "products": ["health supplements", "ingredients", "consumer health devices"],
+        "description": "Asia-sourcing B2B platform known for verified-manufacturer vetting and trade shows.",
+        "tags": ["b2b", "verified suppliers", "trade shows"],
+    },
+    {
+        "name": "DHgate",
+        "category": "marketplace",
+        "website": "https://www.dhgate.com",
+        "country": "China",
+        "location": "Beijing, CN (global reach)",
+        "moq": "Very low; single-carton lots common",
+        "certifications": ["Buyer-protection escrow"],
+        "products": ["small-lot supplements", "vitamins", "sports nutrition"],
+        "description": "Small-batch wholesale arm of the Chinese export ecosystem; low MOQs with escrow.",
+        "tags": ["b2b", "small lots", "escrow"],
+    },
+    {
+        "name": "ThomasNet",
+        "category": "marketplace",
+        "website": "https://www.thomasnet.com",
+        "country": "USA",
+        "location": "New York, NY",
+        "moq": "n/a — RFQ directory",
+        "certifications": ["North American manufacturer focus"],
+        "products": ["co-manufacturers", "co-packers", "ingredient distributors", "private label"],
+        "description": "Directory of North American industrial and nutraceutical manufacturers with direct RFQ.",
+        "tags": ["b2b", "directory", "rfq", "usa"],
+    },
+    {
+        "name": "EC21",
+        "category": "marketplace",
+        "website": "https://www.ec21.com",
+        "country": "South Korea",
+        "location": "Seoul, KR",
+        "moq": "Offer-based",
+        "certifications": ["Gold/Silver supplier membership tiers"],
+        "products": ["chemicals", "pharmaceuticals", "food additives", "herbal materials"],
+        "description": "Korean global B2B platform strong in chemicals and pharma trade offers.",
+        "tags": ["b2b", "chemicals", "trade offers"],
+    },
+]
+
+
+def enrich(rows) -> list[dict]:
+    """Attach pack sizes / indicative pricing to each supplier entry."""
+    for r in rows:
+        extra = PRICE_AND_PACKS.get(r["name"], {})
+        r.setdefault("pack_sizes", extra.get("pack_sizes", []))
+        r.setdefault("price_examples", extra.get("price_examples", []))
+        r.setdefault("pricing_note", extra.get("pricing_note", ""))
+    return rows
+
+
+ALL_SUPPLIERS: list[dict] = validate(enrich(SUPPLIERS + MARKETPLACES))
+
+
 if __name__ == "__main__":
-    print(f"{len(validate(SUPPLIERS))} suppliers validated")
+    print(f"{len(ALL_SUPPLIERS)} suppliers validated")
