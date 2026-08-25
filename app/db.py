@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "suppliers.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -48,6 +48,30 @@ CREATE TRIGGER IF NOT EXISTS suppliers_au AFTER UPDATE ON suppliers BEGIN
     VALUES (new.id, new.name, new.description, new.products, new.tags, new.certifications,
             new.pack_sizes || ' ' || new.price_examples || ' ' || new.pricing_note);
 END;
+CREATE TABLE IF NOT EXISTS drugs (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    kind        TEXT NOT NULL CHECK (kind IN ('rx','otc','supplement')),
+    description TEXT NOT NULL,
+    sourcing    TEXT NOT NULL DEFAULT ''
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS drugs_fts USING fts5(
+    name, description, sourcing, content='drugs', content_rowid='id'
+);
+CREATE TRIGGER IF NOT EXISTS drugs_ai AFTER INSERT ON drugs BEGIN
+    INSERT INTO drugs_fts(rowid, name, description, sourcing)
+    VALUES (new.id, new.name, new.description, new.sourcing);
+END;
+CREATE TRIGGER IF NOT EXISTS drugs_ad AFTER DELETE ON drugs BEGIN
+    INSERT INTO drugs_fts(drugs_fts, rowid, name, description, sourcing)
+    VALUES ('delete', old.id, old.name, old.description, old.sourcing);
+END;
+CREATE TRIGGER IF NOT EXISTS drugs_au AFTER UPDATE ON drugs BEGIN
+    INSERT INTO drugs_fts(drugs_fts, rowid, name, description, sourcing)
+    VALUES ('delete', old.id, old.name, old.description, old.sourcing);
+    INSERT INTO drugs_fts(rowid, name, description, sourcing)
+    VALUES (new.id, new.name, new.description, new.sourcing);
+END;
 """
 
 CATEGORY_LABELS = {
@@ -67,7 +91,9 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
-def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
+def init_db(seed_rows: list[dict[str, Any]] | None = None,
+            drug_rows: list[dict[str, Any]] | None = None) -> int:
+    """Create schema (migrating old versions); sync missing seed rows. Returns supplier count."""
     """Create schema (migrating old versions); seed only when table empty."""
     with connect() as conn:
         version = conn.execute("PRAGMA user_version").fetchone()[0]
@@ -77,18 +103,39 @@ def init_db(seed_rows: list[dict[str, Any]] | None = None) -> int:
                 "DROP TRIGGER IF EXISTS suppliers_ai; DROP TRIGGER IF EXISTS suppliers_ad;"
                 "DROP TRIGGER IF EXISTS suppliers_au;"
                 "DROP TABLE IF EXISTS suppliers_fts; DROP TABLE IF EXISTS suppliers;"
+                "DROP TRIGGER IF EXISTS drugs_ai; DROP TRIGGER IF EXISTS drugs_ad;"
+                "DROP TRIGGER IF EXISTS drugs_au;"
+                "DROP TABLE IF EXISTS drugs_fts; DROP TABLE IF EXISTS drugs;"
                 f"PRAGMA user_version={SCHEMA_VERSION};"
             )
         conn.executescript(SCHEMA)
+        if drug_rows:
+            for row in drug_rows:
+                conn.execute(
+                    """INSERT INTO drugs (name, kind, description, sourcing)
+                       VALUES (?,?,?,?)
+                       ON CONFLICT(name) DO UPDATE SET
+                         kind=excluded.kind, description=excluded.description,
+                         sourcing=excluded.sourcing""",
+                    (row["name"], row["kind"], row["description"], row.get("sourcing", "")),
+                )
         if seed_rows:
-            # sync: add any seed entries missing from the index (never overwrite edits)
+            # sync: insert new entries and refresh existing ones from the seed source of truth
             for row in seed_rows:
                 conn.execute(
-                    """INSERT OR IGNORE INTO suppliers
+                    """INSERT INTO suppliers
                        (name, category, website, country, location, moq,
                         certifications, products, description, tags,
                         pack_sizes, price_examples, pricing_note)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(name) DO UPDATE SET
+                         category=excluded.category, website=excluded.website,
+                         country=excluded.country, location=excluded.location,
+                         moq=excluded.moq, certifications=excluded.certifications,
+                         products=excluded.products, description=excluded.description,
+                         tags=excluded.tags, pack_sizes=excluded.pack_sizes,
+                         price_examples=excluded.price_examples,
+                         pricing_note=excluded.pricing_note""",
                     (
                         row["name"], row["category"], row["website"], row["country"],
                         row.get("location", ""), row.get("moq", ""),
@@ -122,6 +169,25 @@ def sanitize_query(q: str) -> str:
     return " ".join(
         t + "*" for t in cleaned.split() if t and t.upper() not in {"AND", "OR", "NOT", "NEAR"}
     )
+
+
+def search_drugs(q: str, limit: int = 3) -> list[dict[str, Any]]:
+    """Match molecule/OTC/supplement names (e.g. 'sertraline') against the drug catalog."""
+    if not q.strip():
+        return []
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT d.*, bm25(drugs_fts) AS rank FROM drugs d
+               JOIN drugs_fts ON drugs_fts.rowid = d.id
+               WHERE drugs_fts MATCH ? ORDER BY rank LIMIT ?""",
+            (sanitize_query(q), limit),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d.pop("rank", None)
+        out.append(d)
+    return out
 
 
 def search(

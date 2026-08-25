@@ -12,9 +12,12 @@ FastAPI + SQLite FTS5 backend, zero-dependency vanilla JS frontend.
 - **Faceted filtering** — category, country, certification (multi-select)
 - **REST API** — `/api/search`, `/api/suppliers/{id}`, `/api/facets`, `/healthz`
 - **Web UI** — single-page dark UI served at `/`
-- **29-company seed index** — real companies: BulkSupplements, PureBulk, Prinova,
-  Glanbia Nutritionals, Starwest Botanicals, Cayman Chemical, Suanfarma, McKesson,
-  Cencora, Cardinal Health and more
+- **Drug-name lookup** — search `sertraline`, `melatonin`, `ibuprofen`… and get
+  a drug card (kind, description, legitimate sourcing channels) plus matching
+  licensed distributors; 38 molecules/actives indexed
+- **64-supplier index** — real companies across CN/KR/IN/US/CA/UK/DE/EU:
+  BulkSupplements, Divi's Labs, Dr. Reddy's, CSPC, Hisun, Celltrion, Apotex,
+  Jamieson, PHOENIX group, Evonik, McKesson, Cencora, Cardinal Health and more
 - **Pricing & quantities** — indicative bulk price examples ($/kg etc.), pack sizes
   and MOQ notes per supplier; searchable ("$45 kg", "25 kg drum")
 - **B2B marketplaces indexed** — Alibaba.com, Made-in-China.com, IndiaMART,

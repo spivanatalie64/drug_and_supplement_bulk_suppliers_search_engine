@@ -16,10 +16,11 @@ try:  # standalone FastMCP (fastmcp>=2) or SDK-bundled (mcp<2)
 except ImportError:
     from mcp.server.fastmcp import FastMCP
 
-from app.db import CATEGORY_LABELS, facets, get_supplier, init_db, search
+from app.db import CATEGORY_LABELS, facets, get_supplier, init_db, search, search_drugs
 from app.seed_data import ALL_SUPPLIERS as SUPPLIERS
+from app.seed_data import DRUGS
 
-init_db(SUPPLIERS)  # auto-create/seed index on startup
+init_db(SUPPLIERS, DRUGS)  # auto-create/seed index on startup
 
 mcp = FastMCP(
     "bulksource",
@@ -51,7 +52,8 @@ def search_suppliers(
     """
     results, total = search(q=q, category=category, country=country,
                             cert=cert, limit=min(max(limit, 1), 100))
-    return {"total": total, "results": results}
+    drug_matches = search_drugs(q) if q.strip() else []
+    return {"total": total, "drugs": drug_matches, "results": results}
 
 
 @mcp.tool()

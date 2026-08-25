@@ -42,6 +42,12 @@ table.prices th{color:var(--dim);text-align:left;font-weight:600;font-size:11px;
 table.prices td{padding:4px 12px 4px 0;border-bottom:1px dashed #1c242f;color:#c6d2e2}
 table.prices td.amt{color:var(--acc);font-weight:600;white-space:nowrap}
 .pnote{margin-top:6px;font-size:12.5px;color:#8b99ab;font-style:italic}
+.drug{border-color:#1d4430;background:#13201a}
+.drug .drugname{color:var(--acc)}
+.badge.kind-rx{color:#f87171;border-color:#4c1f24}
+.badge.kind-otc{color:#fbbf24;border-color:#4a3a12}
+.badge.kind-supplement{color:var(--acc);border-color:#1d4430}
+.drughead{margin:14px 2px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim)}
 .empty{text-align:center;color:var(--dim);padding:60px 0}
 footer{max-width:900px;margin:0 auto 40px;padding:0 16px;color:#5c6a7c;font-size:12px;text-align:center}
 @media(max-width:800px){.layout{flex-direction:column}aside{width:100%}}
@@ -99,6 +105,18 @@ function facetBox(id, items, key){
   }
 }
 
+function drugCard(d){
+  const kindLabel = {rx:"Rx medicine", otc:"OTC", supplement:"Supplement active"}[d.kind] || d.kind;
+  const el = document.createElement("div");
+  el.className = "card drug";
+  el.innerHTML = `
+    <h2><span class="drugname">${d.name}</span>
+      <span class="badge kind-${d.kind}">${kindLabel}</span></h2>
+    <div class="desc">${d.description}</div>
+    <div class="kv"><span><b>Legit sourcing:</b> ${d.sourcing}</span></div>`;
+  return el;
+}
+
 function resultCard(s){
   const d = document.createElement("div");
   d.className = "card";
@@ -129,7 +147,18 @@ async function run(){
     `${data.total} supplier${data.total===1?"":"s"}${data.query?` for "${data.query}"`:""}`;
   const box = document.getElementById("results");
   box.innerHTML = "";
-  if(!data.results.length){
+  if(data.drugs && data.drugs.length){
+    const h = document.createElement("div");
+    h.className = "drughead";
+    h.textContent = "Drug matches";
+    box.appendChild(h);
+    data.drugs.forEach(d => box.appendChild(drugCard(d)));
+    const h2 = document.createElement("div");
+    h2.className = "drughead";
+    h2.textContent = "Suppliers & marketplaces";
+    box.appendChild(h2);
+  }
+  if(!data.results.length && !(data.drugs && data.drugs.length)){
     box.innerHTML = '<div class="empty">No suppliers matched. Try fewer filters.</div>';
   } else {
     data.results.forEach(s => box.appendChild(resultCard(s)));

@@ -57,6 +57,16 @@ def test_price_and_pack_fields_returned():
     assert "unit" in top["price_examples"][0]
 
 
+def test_drug_lookup_sertraline():
+    from app.db import search_drugs
+    hits = search_drugs("sertraline")
+    assert hits and hits[0]["name"] == "Sertraline"
+    assert hits[0]["kind"] == "rx"
+
+def test_distributors_findable_by_molecule():
+    results, total = search("sertraline", category=["pharma_dist"])
+    assert total >= 3
+
 def test_api_endpoints(client):
     r = client.get("/api/search", params={"q": "vitamin"})
     assert r.status_code == 200

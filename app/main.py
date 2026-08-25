@@ -8,15 +8,16 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .db import facets, get_supplier, init_db, search
+from .db import facets, get_supplier, init_db, search, search_drugs
 from .seed_data import ALL_SUPPLIERS as SUPPLIERS
+from .seed_data import DRUGS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    count = init_db(SUPPLIERS)
+    count = init_db(SUPPLIERS, DRUGS)
     print(f"[startup] {count} suppliers in index")
     yield
 
@@ -41,7 +42,9 @@ def api_search(
 ):
     results, total = search(q=q, category=category or None, country=country or None,
                             cert=cert or None, limit=limit, offset=offset)
-    return {"query": q, "total": total, "limit": limit, "offset": offset, "results": results}
+    drug_matches = search_drugs(q) if q.strip() else []
+    return {"query": q, "total": total, "limit": limit, "offset": offset,
+            "drugs": drug_matches, "results": results}
 
 
 @app.get("/api/suppliers/{supplier_id}")
