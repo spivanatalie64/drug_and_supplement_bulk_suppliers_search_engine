@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BulkSource — Drug & Supplement Bulk Suppliers</title>
+<style>
+:root{--bg:#0f1216;--card:#171c23;--edge:#232b36;--txt:#e8edf4;--dim:#93a1b3;--acc:#4ade80;--acc2:#38bdf8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:28px 20px 12px;text-align:center}
+h1{font-size:26px;font-weight:700}
+h1 span{color:var(--acc)}
+.sub{color:var(--dim);margin-top:6px;font-size:14px}
+.searchwrap{max-width:760px;margin:18px auto 6px;display:flex;gap:8px;padding:0 16px}
+#q{flex:1;background:var(--card);border:1px solid var(--edge);border-radius:10px;padding:12px 16px;color:var(--txt);font-size:16px;outline:none}
+#q:focus{border-color:var(--acc2)}
+button.go{background:var(--acc);color:#06240f;border:none;border-radius:10px;padding:0 22px;font-weight:700;font-size:15px;cursor:pointer}
+.layout{display:flex;gap:18px;max-width:1100px;margin:14px auto 60px;padding:0 16px}
+aside{width:230px;flex-shrink:0}
+.facetbox{background:var(--card);border:1px solid var(--edge);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+.facetbox h3{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin-bottom:8px}
+.facet{display:flex;justify-content:space-between;align-items:center;padding:3px 0;cursor:pointer;color:#c6d2e2;font-size:14px;border-radius:6px}
+.facet:hover{color:var(--acc)}
+.facet input{accent-color:var(--acc);margin-right:7px}
+.facet .cnt{color:var(--dim);font-size:12px}
+main{flex:1}
+.meta{color:var(--dim);font-size:13px;margin:4px 2px 12px}
+.card{background:var(--card);border:1px solid var(--edge);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.card h2{font-size:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.card h2 a{color:var(--acc2);text-decoration:none}
+.card h2 a:hover{text-decoration:underline}
+.badge{font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid var(--edge);color:var(--dim)}
+.badge.cat{color:var(--acc);border-color:#1d4430}
+.desc{color:#c6d2e2;margin-top:6px;font-size:14px}
+.kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;font-size:13px;color:var(--dim)}
+.kv b{color:#aebccd;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chip{font-size:11.5px;background:#101720;border:1px solid var(--edge);border-radius:6px;padding:2px 7px;color:var(--dim)}
+.empty{text-align:center;color:var(--dim);padding:60px 0}
+footer{max-width:900px;margin:0 auto 40px;padding:0 16px;color:#5c6a7c;font-size:12px;text-align:center}
+@media(max-width:800px){.layout{flex-direction:column}aside{width:100%}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bulk<span>Source</span></h1>
+  <div class="sub">Search engine for bulk &amp; wholesale suppliers of drugs and supplements</div>
+</header>
+
+<div class="searchwrap">
+  <input id="q" type="search" placeholder='Try "creatine", "organic herbs", "GMP capsules"…' autofocus>
+  <button class="go" onclick="run()">Search</button>
+</div>
+
+<div class="layout">
+  <aside>
+    <div class="facetbox"><h3>Category</h3><div id="f-cat"></div></div>
+    <div class="facetbox"><h3>Country</h3><div id="f-country"></div></div>
+    <div class="facetbox"><h3>Certification</h3><div id="f-cert"></div></div>
+  </aside>
+  <main>
+    <div class="meta" id="meta">Loading…</div>
+    <div id="results"></div>
+  </main>
+</div>
+
+<footer>Seed index of real companies for B2B sourcing research. Verify licensing (FDA / DEA / state) and certifications directly with each supplier before purchase. Not medical advice.</footer>
+
+<script>
+const state = {q:"", category:new Set(), country:new Set(), cert:new Set()};
+
+async function api(path){
+  const r = await fetch(path);
+  return r.json();
+}
+
+function facetBox(id, items, key){
+  const el = document.getElementById(id);
+  el.innerHTML = "";
+  for(const f of items){
+    const label = document.createElement("label");
+    label.className = "facet";
+    const left = document.createElement("span");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = state[key].has(f.value);
+    cb.onchange = () => { cb.checked ? state[key].add(f.value) : state[key].delete(f.value); run(); };
+    left.appendChild(cb);
+    left.appendChild(document.createTextNode(" " + (f.label ?? f.value)));
+    const cnt = document.createElement("span"); cnt.className="cnt"; cnt.textContent=f.count;
+    label.append(left,cnt);
+    el.appendChild(label);
+  }
+}
+
+function resultCard(s){
+  const d = document.createElement("div");
+  d.className = "card";
+  const site = s.website.replace(/^https?:\/\//,"").replace(/\/$/,"");
+  d.innerHTML = `
+    <h2><a href="${s.website}" target="_blank" rel="noopener">${s.name}</a>
+      <span class="badge cat">${s.category_label}</span>
+      ${s.country ? `<span class="badge">${s.country}</span>` : ""}</h2>
+    <div class="desc">${s.description}</div>
+    <div class="kv">
+      <span><b>Location:</b> ${s.location || "—"}</span>
+      <span><b>MOQ:</b> ${s.moq || "—"}</span>
+      ${s.certifications.length?`<span><b>Certs:</b> ${s.certifications.join(", ")}</span>`:""}
+    </div>
+    ${s.products.length?`<div class="chips">${s.products.map(p=>`<span class="chip">${p}</span>`).join("")}${s.tags.map(t=>`<span class="chip">#${t}</span>`).join("")}</div>`:""}`;
+  return d;
+}
+
+async function run(){
+  const p = new URLSearchParams();
+  if(state.q.trim()) p.set("q", state.q.trim());
+  for(const k of ["category","country","cert"]) for(const v of state[k]) p.append(k,v);
+  p.set("limit","100");
+  const data = await api("/api/search?" + p.toString());
+  document.getElementById("meta").textContent =
+    `${data.total} supplier${data.total===1?"":"s"}${data.query?` for "${data.query}"`:""}`;
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  if(!data.results.length){
+    box.innerHTML = '<div class="empty">No suppliers matched. Try fewer filters.</div>';
+  } else {
+    data.results.forEach(s => box.appendChild(resultCard(s)));
+  }
+}
+
+document.getElementById("q").addEventListener("keydown", e => {
+  if(e.key === "Enter"){ state.q = e.target.value; run(); }
+});
+
+(async function boot(){
+  const f = await api("/api/facets");
+  facetBox("f-cat", f.categories, "category");
+  facetBox("f-country", f.countries, "country");
+  facetBox("f-cert", f.certifications.slice(0,12), "cert");
+  await run();
+})();
+</script>
+</body>
+</html>
