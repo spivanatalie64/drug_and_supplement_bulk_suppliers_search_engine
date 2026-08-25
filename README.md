@@ -85,7 +85,8 @@ curl 'localhost:8010/api/facets'
 ```
 
 Query params for `/api/search`: `q`, `category` (repeatable), `country` (repeatable),
-`cert` (repeatable), `limit` ≤ 100, `offset`.
+`cert` (repeatable), `limit` ≤ 100, `offset`. Responses include `drugs` (molecule
+matches) alongside supplier `results`.
 
 Categories: `ingredient` · `finished` · `botanical` · `api` · `pharma_dist`
 
