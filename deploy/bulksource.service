@@ -1,0 +1,12 @@
+[Unit]
+Description=BulkSource - drug & supplement bulk supplier search engine (API + web UI)
+After=network.target
+
+[Service]
+WorkingDirectory=/home/natalie/Projects/drug_and_supplement_bulk_suppliers_search_engine
+ExecStart=/home/natalie/Projects/drug_and_supplement_bulk_suppliers_search_engine/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
